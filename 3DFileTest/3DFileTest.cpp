@@ -6,6 +6,8 @@
 #include "Common/RedguardTexBsiFile.h"
 #include "Common/RedguardFbx.h"
 
+#include <fbxsdk.h>
+
 
 using std::string;
 using std::vector;
@@ -13,9 +15,11 @@ using namespace uesp;
 
 
 const string REDGUARD_FILE_PATH = "D:\\Redguard\\Redguard\\fxart\\";
+//const string REDGUARD_FILE_PATH = "D:\\EGD\\uesp\\Redguard\\3dart\\";
+
 const dword REDGUARD_HEADER_SIZE = 64;
 
-const string OUTPUT_FBX_PATH = "c:\\Temp\\fbx\\";
+const string OUTPUT_FBX_PATH = "c:\\Temp\\fbx3\\";
 const string OUTPUT_TEXTURE_PATH = "c:\\Temp\\texture\\";
 
 
@@ -25,7 +29,7 @@ struct rg3d_header_t
 	dword NumVertices;
 	dword NumFaces;
 	dword Radius;
-	dword Unk1;
+	dword NumFrames;
 	dword Offset3;
 	dword Unk2;
 	dword Offset4;
@@ -58,7 +62,7 @@ bool Parse3DFile(const string Filename)
 {
 	rg3d_file_t FileInfo;
 	FILE* pFile;
-	printf("\tParsing file %s...\n", Filename.c_str());
+	PrintLog("\tParsing file %s...", Filename.c_str());
 
 	pFile = fopen(Filename.c_str(), "rb");
 	if (pFile == nullptr) return ReportError("Error: Failed to open file '%s' for reading!", Filename.c_str());
@@ -101,7 +105,7 @@ bool ParseAll3DFiles(const string RootPath)
 	HANDLE hFind;
 	int FileCount = 0;
 
-	printf("Parsing all Redguard 3D files in %s...\n", RootPath.c_str());
+	PrintLog("Parsing all Redguard 3D files in %s...", RootPath.c_str());
 	
 	hFind = FindFirstFile(FileSpec.c_str(), &FindData);
 	if (hFind == INVALID_HANDLE_VALUE) return ReportError("Error: Failed to find 3D files in path '%s'!", FileSpec);
@@ -116,7 +120,7 @@ bool ParseAll3DFiles(const string RootPath)
 	
 	FindClose(hFind);
 
-	printf("Found %d 3D files!\n", FileCount);
+	PrintLog("Found %d 3D files!", FileCount);
 
 	return true;
 }
@@ -129,7 +133,7 @@ bool ParseAll3DCFiles(const string RootPath)
 	HANDLE hFind;
 	int FileCount = 0;
 
-	printf("Parsing all Redguard 3DC files in %s...\n", RootPath.c_str());
+	PrintLog("Parsing all Redguard 3DC files in %s...", RootPath.c_str());
 
 	hFind = FindFirstFile(FileSpec.c_str(), &FindData);
 	if (hFind == INVALID_HANDLE_VALUE) return ReportError("Error: Failed to find 3DC files in path '%s'!", FileSpec);
@@ -143,7 +147,7 @@ bool ParseAll3DCFiles(const string RootPath)
 
 	FindClose(hFind);
 
-	printf("Found %d 3DC files!\n", FileCount);
+	PrintLog("Found %d 3DC files!", FileCount);
 
 	return true;
 }
@@ -158,7 +162,7 @@ bool ParseAllTextureFiles(const string RootPath)
 	int FileCount = 0;
 	int ErrorCount = 0;
 
-	printf("Parsing all Redguard Texture files in %s...\n", RootPath.c_str());
+	PrintLog("Parsing all Redguard Texture files in %s...", RootPath.c_str());
 
 	if (!DefaultPalette.Load(RootPath + "REDGUARD.COL")) ReportError("Error: Failed to load the default palette!");
 
@@ -172,19 +176,19 @@ bool ParseAllTextureFiles(const string RootPath)
 
 		TextureFile.SetDefaultPalette(DefaultPalette);
 
-		printf("Loading texture file %s...\n", FindData.cFileName);
+		PrintLog("Loading texture file %s...", FindData.cFileName);
 
 		bool Result = TextureFile.Load(Filename);
 		
 		if (Result)
 		{
-			printf("\tLoaded %s with %u images!\n", Filename.c_str(), TextureFile.m_Filename.size());
+			PrintLog("\tLoaded %s with %u images!", Filename.c_str(), TextureFile.m_Filename.size());
 			Result = TextureFile.ExportImages(OUTPUT_TEXTURE_PATH);
-			if (!Result) printf("\tError: Failed to export image(s) to PNG!\n");
+			if (!Result) PrintLog("\tError: Failed to export image(s) to PNG!");
 		}
 		else
 		{
-			printf("\tError: Failed to load %s!\n", Filename.c_str());
+			PrintLog("\tError: Failed to load %s!", Filename.c_str());
 			++ErrorCount;
 		}
 
@@ -194,7 +198,7 @@ bool ParseAllTextureFiles(const string RootPath)
 
 	FindClose(hFind);
 
-	printf("Found %d Texture files with %d errors!\n", FileCount, ErrorCount);
+	PrintLog("Found %d Texture files with %d errors!", FileCount, ErrorCount);
 
 	return true;
 }
@@ -203,11 +207,11 @@ bool ParseAllTextureFiles(const string RootPath)
 void ShowFileInfos()
 {
 
-	printf("Showing information for %u 3D files:\n", g_FileInfos.size());
+	PrintLog("Showing information for %u 3D files:", g_FileInfos.size());
 
 	for (const auto& Info : g_FileInfos)
 	{
-		printf("\t%s: %d bytes\n", Info.Name.c_str(), Info.Size);
+		PrintLog("\t%s: %d bytes", Info.Name.c_str(), Info.Size);
 
 				/* Make sure offsets are in order */
 		if (Info.Header.Offset0 != 0x40) ReportError("\tOffset0 is not 0x40 (0x%04X)!", Info.Header.Offset0);
@@ -246,7 +250,7 @@ void ShowFileInfos()
 	}
 
 
-	printf("Name, Size, Version, NumVert, NumFace, Radius, Unk1, Offset3, Unk2, Offset4, Unk3, Unk4, Offset5, Offset6, Offset1, Offset2, Unk5, Offset0, 0Size, 1Size, 2Size, 3Size, 4Size, 5Size, 6Size\n");
+	PrintLog("Name, Size, Version, NumVert, NumFace, Radius, NumFrames, Offset3, Unk2, Offset4, Unk3, Unk4, Offset5, Offset6, Offset1, Offset2, Unk5, Offset0, 0Size, 1Size, 2Size, 3Size, 4Size, 5Size, 6Size");
 
 	for (const auto& Info : g_FileInfos)
 	{
@@ -272,8 +276,8 @@ void ShowFileInfos()
 			rec4size = 0;
 		}
 
-		printf("%12.12s, %6d, %4.4s, %4d, %4d, %7d, %5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d,  %5d, %5d, %5d, %5d, %5d, %5d\n", Info.Name.c_str(), Info.Size, (const char *)&Info.Header.Version, Info.Header.NumVertices, Info.Header.NumFaces, Info.Header.Radius,
-					Info.Header.Unk1, Info.Header.Offset3, Info.Header.Unk2, Info.Header.Offset4, Info.Header.Unk3, Info.Header.Unk4, Info.Header.Offset5, Info.Header.Offset6,
+		PrintLog("%12.12s, %6d, %4.4s, %4d, %4d, %7d, %5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d, %5d,  %5d, %5d, %5d, %5d, %5d, %5d", Info.Name.c_str(), Info.Size, (const char *)&Info.Header.Version, Info.Header.NumVertices, Info.Header.NumFaces, Info.Header.Radius,
+					Info.Header.NumFrames, Info.Header.Offset3, Info.Header.Unk2, Info.Header.Offset4, Info.Header.Unk3, Info.Header.Unk4, Info.Header.Offset5, Info.Header.Offset6,
 					Info.Header.Offset1, Info.Header.Offset2, Info.Header.Unk5, Info.Header.Offset0, rec0size, rec1size, rec2size, rec3size, rec4size, rec5size, rec6size);
 	}
 
@@ -282,20 +286,549 @@ void ShowFileInfos()
 }
 
 
+void ShowFileVertexInfos()
+{
+	PrintLog("Name, MinX, MinY, MinZ, MaxX, MaxY, MaxZ");
+
+	for (const auto& Info : g_FileInfos)
+	{
+		PrintLog("%12.12s, %d, %d, %d, %d, %d, %d", Info.Name.c_str(), Info.File.m_MinCoor.x, Info.File.m_MinCoor.y, Info.File.m_MinCoor.z, Info.File.m_MaxCoor.x, Info.File.m_MaxCoor.y, Info.File.m_MaxCoor.z);
+	}
+}
+
+
+void ShowFileModelInfos()
+{
+	std::unordered_map< byte, dword > u1map, u2map, u3map, u4map, u5map;
+
+	PrintLog("Name, Face, Model1, Model2, Model3, Model4, Model5");
+
+	for (const auto& Info : g_FileInfos)
+	{
+		dword i = 0;
+
+		for (const auto &faceData : Info.File.m_FaceData)
+		{
+			++i;
+			//word U1;
+			//word U2;
+			//byte U3;
+
+			++u1map[faceData.U1 & 0xff];
+			++u2map[(faceData.U1 >> 8) & 0xff];
+			++u3map[faceData.U2 & 0xff];
+			++u4map[(faceData.U2 >> 8) & 0xff];
+			++u5map[faceData.U3 & 0xff];
+
+			PrintLog("%12.12s, %4d, %02X, %02X, %02X, %02X, %02X", Info.Name.c_str(), i, faceData.U1 & 0xff, (faceData.U1>>8) & 0xff, faceData.U2 & 0xff, (faceData.U2 >> 8) & 0xff, faceData.U3);
+		}
+	}
+
+	PrintLog("Model U1 has %d unique values.", u1map.size());
+
+	for (const auto& value : u1map) 
+	{	
+		PrintLog("\t0x%02X (%3d) = %d times", (int) value.first, (int)value.first, value.second);
+	}
+
+	PrintLog("Model U2 has %d unique values.", u2map.size());
+
+	for (const auto& value : u2map)
+	{
+		PrintLog("\t0x%02X (%3d) = %d times", (int)value.first, (int)value.first, value.second);
+	}
+
+	PrintLog("Model U3 has %d unique values.", u3map.size());
+
+	for (const auto& value : u3map)
+	{
+		PrintLog("\t0x%02X (%3d) = %d times", (int)value.first, (int)value.first, value.second);
+	}
+
+	PrintLog("Model U4 has %d unique values.", u4map.size());
+
+	for (const auto& value : u4map)
+	{
+		PrintLog("\t0x%02X (%3d) = %d times", (int)value.first, (int)value.first, value.second);
+	}
+
+	PrintLog("Model U5 has %d unique values.", u5map.size());
+
+	for (const auto& value : u5map)
+	{
+		PrintLog("\t0x%02X (%3d) = %d times", (int)value.first, (int)value.first, value.second);
+	}
+
+}
+
+static const char* gDiffuseElementName = "DiffuseUV";
+static const char* gAmbientElementName = "AmbientUV";
+static const char* gEmissiveElementName = "EmissiveUV";
+
+
+// Create texture for cube.
+void CreateTexture(FbxScene* pScene, FbxMesh* pMesh)
+{
+	// A texture need to be connected to a property on the material,
+	// so let's use the material (if it exists) or create a new one
+	FbxSurfacePhong* lMaterial = NULL;
+
+	//get the node of mesh, add material for it.
+	FbxNode* lNode = pMesh->GetNode();
+	if (lNode)
+	{
+		lMaterial = lNode->GetSrcObject<FbxSurfacePhong>(0);
+		if (lMaterial == NULL)
+		{
+			FbxString lMaterialName = "toto";
+			FbxString lShadingName = "Phong";
+			FbxDouble3 lBlack(0.0, 0.0, 0.0);
+			FbxDouble3 lRed(1.0, 0.0, 0.0);
+			FbxDouble3 lDiffuseColor(0.75, 0.75, 0.0);
+
+			FbxLayer* lLayer = pMesh->GetLayer(0);
+
+			// Create a layer element material to handle proper mapping.
+			FbxLayerElementMaterial* lLayerElementMaterial = FbxLayerElementMaterial::Create(pMesh, lMaterialName.Buffer());
+
+			// This allows us to control where the materials are mapped.  Using eAllSame
+			// means that all faces/polygons of the mesh will be assigned the same material.
+			lLayerElementMaterial->SetMappingMode(FbxLayerElement::eAllSame);
+			lLayerElementMaterial->SetReferenceMode(FbxLayerElement::eIndexToDirect);
+
+			// Save the material on the layer
+			lLayer->SetMaterials(lLayerElementMaterial);
+
+			// Add an index to the lLayerElementMaterial.  Since we have only one, and are using eAllSame mapping mode,
+			// we only need to add one.
+			lLayerElementMaterial->GetIndexArray().Add(0);
+
+			lMaterial = FbxSurfacePhong::Create(pScene, lMaterialName.Buffer());
+
+			// Generate primary and secondary colors.
+			lMaterial->Emissive.Set(lBlack);
+			lMaterial->Ambient.Set(lRed);
+			lMaterial->AmbientFactor.Set(1.);
+			// Add texture for diffuse channel
+			lMaterial->Diffuse.Set(lDiffuseColor);
+			lMaterial->DiffuseFactor.Set(1.);
+			lMaterial->TransparencyFactor.Set(0.4);
+			lMaterial->ShadingModel.Set(lShadingName);
+			lMaterial->Shininess.Set(0.5);
+			lMaterial->Specular.Set(lBlack);
+			lMaterial->SpecularFactor.Set(0.3);
+			lNode->AddMaterial(lMaterial);
+		}
+	}
+
+	FbxFileTexture* lTexture = FbxFileTexture::Create(pScene, "Diffuse Texture");
+
+	// Set texture properties.
+	lTexture->SetFileName("c:\\Temp\fbx3\\scene03.jpg"); // Resource file is in current directory.
+	lTexture->SetTextureUse(FbxTexture::eStandard);
+	lTexture->SetMappingType(FbxTexture::eUV);
+	lTexture->SetMaterialUse(FbxFileTexture::eModelMaterial);
+	lTexture->SetSwapUV(false);
+	lTexture->SetTranslation(0.0, 0.0);
+	lTexture->SetScale(1.0, 1.0);
+	lTexture->SetRotation(0.0, 0.0);
+	lTexture->UVSet.Set(FbxString(gDiffuseElementName)); // Connect texture to the proper UV
+
+
+	// don't forget to connect the texture to the corresponding property of the material
+	if (lMaterial)
+		lMaterial->Diffuse.ConnectSrcObject(lTexture);
+
+	lTexture = FbxFileTexture::Create(pScene, "Ambient Texture");
+
+	// Set texture properties.
+	lTexture->SetFileName("c:\\Temp\fbx3\\gradient.jpg"); // Resource file is in current directory.
+	lTexture->SetTextureUse(FbxTexture::eStandard);
+	lTexture->SetMappingType(FbxTexture::eUV);
+	lTexture->SetMaterialUse(FbxFileTexture::eModelMaterial);
+	lTexture->SetSwapUV(false);
+	lTexture->SetTranslation(0.0, 0.0);
+	lTexture->SetScale(1.0, 1.0);
+	lTexture->SetRotation(0.0, 0.0);
+	lTexture->UVSet.Set(FbxString(gAmbientElementName)); // Connect texture to the proper UV
+
+	// don't forget to connect the texture to the corresponding property of the material
+	if (lMaterial)
+		lMaterial->Ambient.ConnectSrcObject(lTexture);
+
+	lTexture = FbxFileTexture::Create(pScene, "Emissive Texture");
+
+	// Set texture properties.
+	lTexture->SetFileName("c:\\Temp\fbx3\\spotty.jpg"); // Resource file is in current directory.
+	lTexture->SetTextureUse(FbxTexture::eStandard);
+	lTexture->SetMappingType(FbxTexture::eUV);
+	lTexture->SetMaterialUse(FbxFileTexture::eModelMaterial);
+	lTexture->SetSwapUV(false);
+	lTexture->SetTranslation(0.0, 0.0);
+	lTexture->SetScale(1.0, 1.0);
+	lTexture->SetRotation(0.0, 0.0);
+	lTexture->UVSet.Set(FbxString(gEmissiveElementName)); // Connect texture to the proper UV
+
+	// don't forget to connect the texture to the corresponding property of the material
+	if (lMaterial)
+		lMaterial->Emissive.ConnectSrcObject(lTexture);
+}
+
+
+void SetCubeDefaultPosition(FbxNode* pCube)
+{
+	pCube->LclTranslation.Set(FbxVector4(-75.0, -50.0, 0.0));
+	pCube->LclRotation.Set(FbxVector4(0.0, 0.0, 0.0));
+	pCube->LclScaling.Set(FbxVector4(1.0, 1.0, 1.0));
+}
+
+
+// Create a cube with a texture. 
+FbxNode* CreateCubeWithTexture(FbxScene* pScene, const char* pName)
+{
+	int i, j;
+	FbxMesh* lMesh = FbxMesh::Create(pScene, pName);
+
+	FbxVector4 lControlPoint0(-50, 0, 50);
+	FbxVector4 lControlPoint1(50, 0, 50);
+	FbxVector4 lControlPoint2(50, 100, 50);
+	FbxVector4 lControlPoint3(-50, 100, 50);
+	FbxVector4 lControlPoint4(-50, 0, -50);
+	FbxVector4 lControlPoint5(50, 0, -50);
+	FbxVector4 lControlPoint6(50, 100, -50);
+	FbxVector4 lControlPoint7(-50, 100, -50);
+
+	FbxVector4 lNormalXPos(1, 0, 0);
+	FbxVector4 lNormalXNeg(-1, 0, 0);
+	FbxVector4 lNormalYPos(0, 1, 0);
+	FbxVector4 lNormalYNeg(0, -1, 0);
+	FbxVector4 lNormalZPos(0, 0, 1);
+	FbxVector4 lNormalZNeg(0, 0, -1);
+
+	// Create control points.
+	lMesh->InitControlPoints(24);
+	FbxVector4* lControlPoints = lMesh->GetControlPoints();
+
+	lControlPoints[0] = lControlPoint0;
+	lControlPoints[1] = lControlPoint1;
+	lControlPoints[2] = lControlPoint2;
+	lControlPoints[3] = lControlPoint3;
+	lControlPoints[4] = lControlPoint1;
+	lControlPoints[5] = lControlPoint5;
+	lControlPoints[6] = lControlPoint6;
+	lControlPoints[7] = lControlPoint2;
+	lControlPoints[8] = lControlPoint5;
+	lControlPoints[9] = lControlPoint4;
+	lControlPoints[10] = lControlPoint7;
+	lControlPoints[11] = lControlPoint6;
+	lControlPoints[12] = lControlPoint4;
+	lControlPoints[13] = lControlPoint0;
+	lControlPoints[14] = lControlPoint3;
+	lControlPoints[15] = lControlPoint7;
+	lControlPoints[16] = lControlPoint3;
+	lControlPoints[17] = lControlPoint2;
+	lControlPoints[18] = lControlPoint6;
+	lControlPoints[19] = lControlPoint7;
+	lControlPoints[20] = lControlPoint1;
+	lControlPoints[21] = lControlPoint0;
+	lControlPoints[22] = lControlPoint4;
+	lControlPoints[23] = lControlPoint5;
+
+
+	// We want to have one normal for each vertex (or control point),
+	// so we set the mapping mode to eByControlPoint.
+	FbxGeometryElementNormal* lGeometryElementNormal = lMesh->CreateElementNormal();
+
+	lGeometryElementNormal->SetMappingMode(FbxGeometryElement::eByControlPoint);
+
+	// Here are two different ways to set the normal values.
+	bool firstWayNormalCalculations = true;
+	if (firstWayNormalCalculations)
+	{
+		// The first method is to set the actual normal value
+		// for every control point.
+		lGeometryElementNormal->SetReferenceMode(FbxGeometryElement::eDirect);
+
+		lGeometryElementNormal->GetDirectArray().Add(lNormalZPos);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalZPos);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalZPos);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalZPos);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalXPos);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalXPos);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalXPos);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalXPos);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalZNeg);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalZNeg);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalZNeg);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalZNeg);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalXNeg);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalXNeg);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalXNeg);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalXNeg);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalYPos);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalYPos);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalYPos);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalYPos);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalYNeg);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalYNeg);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalYNeg);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalYNeg);
+	}
+	else
+	{
+		// The second method is to the possible values of the normals
+		// in the direct array, and set the index of that value
+		// in the index array for every control point.
+		lGeometryElementNormal->SetReferenceMode(FbxGeometryElement::eIndexToDirect);
+
+		// Add the 6 different normals to the direct array
+		lGeometryElementNormal->GetDirectArray().Add(lNormalZPos);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalXPos);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalZNeg);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalXNeg);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalYPos);
+		lGeometryElementNormal->GetDirectArray().Add(lNormalYNeg);
+
+		// Now for each control point, we need to specify which normal to use
+		lGeometryElementNormal->GetIndexArray().Add(0); // index of lNormalZPos in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(0); // index of lNormalZPos in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(0); // index of lNormalZPos in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(0); // index of lNormalZPos in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(1); // index of lNormalXPos in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(1); // index of lNormalXPos in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(1); // index of lNormalXPos in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(1); // index of lNormalXPos in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(2); // index of lNormalZNeg in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(2); // index of lNormalZNeg in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(2); // index of lNormalZNeg in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(2); // index of lNormalZNeg in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(3); // index of lNormalXNeg in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(3); // index of lNormalXNeg in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(3); // index of lNormalXNeg in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(3); // index of lNormalXNeg in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(4); // index of lNormalYPos in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(4); // index of lNormalYPos in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(4); // index of lNormalYPos in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(4); // index of lNormalYPos in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(5); // index of lNormalYNeg in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(5); // index of lNormalYNeg in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(5); // index of lNormalYNeg in the direct array.
+		lGeometryElementNormal->GetIndexArray().Add(5); // index of lNormalYNeg in the direct array.
+	}
+
+	// Array of polygon vertices.
+	int lPolygonVertices[] = { 0, 1, 2, 3,
+		4, 5, 6, 7,
+		8, 9, 10, 11,
+		12, 13, 14, 15,
+		16, 17, 18, 19,
+		20, 21, 22, 23 };
+
+	// Create UV for Diffuse channel
+	FbxGeometryElementUV* lUVDiffuseElement = lMesh->CreateElementUV(gDiffuseElementName);
+	FBX_ASSERT(lUVDiffuseElement != NULL);
+	lUVDiffuseElement->SetMappingMode(FbxGeometryElement::eByPolygonVertex);
+	lUVDiffuseElement->SetReferenceMode(FbxGeometryElement::eIndexToDirect);
+
+	FbxVector2 lVectors0(0, 0);
+	FbxVector2 lVectors1(1, 0);
+	FbxVector2 lVectors2(1, 1);
+	FbxVector2 lVectors3(0, 1);
+
+	lUVDiffuseElement->GetDirectArray().Add(lVectors0);
+	lUVDiffuseElement->GetDirectArray().Add(lVectors1);
+	lUVDiffuseElement->GetDirectArray().Add(lVectors2);
+	lUVDiffuseElement->GetDirectArray().Add(lVectors3);
+
+
+	// Create UV for Ambient channel
+	FbxGeometryElementUV* lUVAmbientElement = lMesh->CreateElementUV(gAmbientElementName);
+
+	lUVAmbientElement->SetMappingMode(FbxGeometryElement::eByPolygonVertex);
+	lUVAmbientElement->SetReferenceMode(FbxGeometryElement::eIndexToDirect);
+
+	lVectors0.Set(0, 0);
+	lVectors1.Set(1, 0);
+	lVectors2.Set(0, 0.418586879968643);
+	lVectors3.Set(1, 0.418586879968643);
+
+	lUVAmbientElement->GetDirectArray().Add(lVectors0);
+	lUVAmbientElement->GetDirectArray().Add(lVectors1);
+	lUVAmbientElement->GetDirectArray().Add(lVectors2);
+	lUVAmbientElement->GetDirectArray().Add(lVectors3);
+
+	// Create UV for Emissive channel
+	FbxGeometryElementUV* lUVEmissiveElement = lMesh->CreateElementUV(gEmissiveElementName);
+
+	lUVEmissiveElement->SetMappingMode(FbxGeometryElement::eByPolygonVertex);
+	lUVEmissiveElement->SetReferenceMode(FbxGeometryElement::eIndexToDirect);
+
+	lVectors0.Set(0.2343, 0);
+	lVectors1.Set(1, 0.555);
+	lVectors2.Set(0.333, 0.999);
+	lVectors3.Set(0.555, 0.666);
+
+	lUVEmissiveElement->GetDirectArray().Add(lVectors0);
+	lUVEmissiveElement->GetDirectArray().Add(lVectors1);
+	lUVEmissiveElement->GetDirectArray().Add(lVectors2);
+	lUVEmissiveElement->GetDirectArray().Add(lVectors3);
+
+	//Now we have set the UVs as eIndexToDirect reference and in eByPolygonVertex  mapping mode
+	//we must update the size of the index array.
+	lUVDiffuseElement->GetIndexArray().SetCount(24);
+	lUVAmbientElement->GetIndexArray().SetCount(24);
+	lUVEmissiveElement->GetIndexArray().SetCount(24);
+
+
+
+	// Create polygons. Assign texture and texture UV indices.
+	for (i = 0; i < 6; i++)
+	{
+		//we won't use the default way of assigning textures, as we have
+		//textures on more than just the default (diffuse) channel.
+		lMesh->BeginPolygon(-1, -1, false);
+
+
+
+		for (j = 0; j < 4; j++)
+		{
+			//this function points 
+			lMesh->AddPolygon(lPolygonVertices[i * 4 + j] // Control point index. 
+			);
+			//Now we have to update the index array of the UVs for diffuse, ambient and emissive
+			lUVDiffuseElement->GetIndexArray().SetAt(i * 4 + j, j);
+			lUVAmbientElement->GetIndexArray().SetAt(i * 4 + j, j);
+			lUVEmissiveElement->GetIndexArray().SetAt(i * 4 + j, j);
+
+		}
+
+		lMesh->EndPolygon();
+	}
+
+	FbxNode* lNode = FbxNode::Create(pScene, pName);
+
+	lNode->SetNodeAttribute(lMesh);
+	lNode->SetShadingMode(FbxNode::eTextureShading);
+
+	CreateTexture(pScene, lMesh);
+
+	return lNode;
+}
+
+
+bool CreateScene(FbxScene* pScene, const char* pSampleFileName)
+{
+	FbxNode* lCube = CreateCubeWithTexture(pScene, "Cube");
+
+	SetCubeDefaultPosition(lCube);
+
+	// Build the node tree.
+	FbxNode* lRootNode = pScene->GetRootNode();
+	lRootNode->AddChild(lCube);
+		
+	//FbxGlobalSettings& lGlobalSettings = pScene->GetGlobalSettings();
+
+	return true;
+}
+
+
+#ifdef IOS_REF
+	#undef  IOS_REF
+	#define IOS_REF (*(pManager->GetIOSettings()))
+#endif
+
+bool SaveScene1(FbxManager* pManager, FbxDocument* pScene, const char* pFilename, int pFileFormat = -1, bool pEmbedMedia = false)
+{
+	int lMajor, lMinor, lRevision;
+	bool lStatus = true;
+
+	// Create an exporter.
+	FbxExporter* lExporter = FbxExporter::Create(pManager, "");
+
+	if (pFileFormat < 0 || pFileFormat >= pManager->GetIOPluginRegistry()->GetWriterFormatCount())
+	{
+		// Write in fall back format in less no ASCII format found
+		pFileFormat = pManager->GetIOPluginRegistry()->GetNativeWriterFormat();
+
+		//Try to export in ASCII if possible
+		int lFormatIndex, lFormatCount = pManager->GetIOPluginRegistry()->GetWriterFormatCount();
+
+		for (lFormatIndex = 0; lFormatIndex < lFormatCount; lFormatIndex++)
+		{
+			if (pManager->GetIOPluginRegistry()->WriterIsFBX(lFormatIndex))
+			{
+				FbxString lDesc = pManager->GetIOPluginRegistry()->GetWriterFormatDescription(lFormatIndex);
+				const char *lASCII = "ascii";
+				if (lDesc.Find(lASCII) >= 0)
+				{
+					pFileFormat = lFormatIndex;
+					break;
+				}
+			}
+		}
+	}
+
+	// Set the export states. By default, the export states are always set to 
+	// true except for the option eEXPORT_TEXTURE_AS_EMBEDDED. The code below 
+	// shows how to change these states.
+	IOS_REF.SetBoolProp(EXP_FBX_MATERIAL, true);
+	IOS_REF.SetBoolProp(EXP_FBX_TEXTURE, true);
+	IOS_REF.SetBoolProp(EXP_FBX_EMBEDDED, pEmbedMedia);
+	IOS_REF.SetBoolProp(EXP_FBX_SHAPE, true);
+	IOS_REF.SetBoolProp(EXP_FBX_GOBO, true);
+	IOS_REF.SetBoolProp(EXP_FBX_ANIMATION, true);
+	IOS_REF.SetBoolProp(EXP_FBX_GLOBAL_SETTINGS, true);
+
+	// Initialize the exporter by providing a filename.
+	if (lExporter->Initialize(pFilename, pFileFormat, pManager->GetIOSettings()) == false)
+	{
+		FBXSDK_printf("Call to FbxExporter::Initialize() failed.\n");
+		FBXSDK_printf("Error returned: %s\n\n", lExporter->GetStatus().GetErrorString());
+		return false;
+	}
+
+	FbxManager::GetFileFormatVersion(lMajor, lMinor, lRevision);
+	FBXSDK_printf("FBX file format version %d.%d.%d\n\n", lMajor, lMinor, lRevision);
+
+	// Export the scene.
+	lStatus = lExporter->Export(pScene);
+
+	// Destroy the exporter.
+	lExporter->Destroy();
+	return lStatus;
+}
+
+
+
+
 int main()
 {
-	//printf("Image Header Size = %d\n", sizeof(redguard_image_header_t));
-	//printf("Header Size = %d\n", sizeof(rg3d_header_t));
-	//printf("Header Size = %d\n", sizeof(Redguard3dFile_Header_t));
+	SetLogLineHeaderOutput(false);
+	DuplicateLogToStdOut(true);
+	OpenLog("3dfiletest.log");
 
 	InitializeImageLib();
 	InitializeFbxSdkObjects();
+
+	// Create the scene.
+	//FbxScene* lScene = FbxScene::Create(g_pSdkManager, "c:\\Temp\\fbx3\\cube.fbx");
+	//bool lResult = CreateScene(lScene, "c:\\Temp\\fbx3\\cube.fbx");
+	//lResult = ::SaveScene1(g_pSdkManager, lScene, "c:\\Temp\\fbx3\\cube.fbx");
+
+	//PrintLog("Image Header Size = %d", sizeof(redguard_image_header_t));
+	//PrintLog("Header Size = %d", sizeof(rg3d_header_t));
+	//PrintLog("Header Size = %d", sizeof(Redguard3dFile_Header_t));
     
+	Parse3DFile(REDGUARD_FILE_PATH + "MKCRATE.3D");
+	Parse3DFile(REDGUARD_FILE_PATH + "MKCRATE1.3D");
+	Parse3DFile(REDGUARD_FILE_PATH + "XWANTED.3D");
 	//ParseAll3DCFiles(REDGUARD_FILE_PATH);
 	//ParseAll3DFiles(REDGUARD_FILE_PATH);
-	ParseAllTextureFiles(REDGUARD_FILE_PATH);
+	//ParseAllTextureFiles(REDGUARD_FILE_PATH);
 
 	//ShowFileInfos();
+	ShowFileVertexInfos();
+	//ShowFileModelInfos();
 
 	DestroyFbxSdkObjects();
 

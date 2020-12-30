@@ -101,4 +101,11 @@
       <Filter>Source Files\Release</Filter>
     </Library>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="..\README.md" />
+    <None Include="..\LICENSE" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="3dfiletest.log" />
+  </ItemGroup>
 </Project>

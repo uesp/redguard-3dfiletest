@@ -53,6 +53,98 @@ namespace uesp
 	}
 
 
+	void CreateTexture(FbxScene* pScene, FbxMesh* pMesh)
+	{
+		// A texture need to be connected to a property on the material,
+		// so let's use the material (if it exists) or create a new one
+		FbxSurfacePhong* lMaterial = NULL;
+
+		//get the node of mesh, add material for it.
+		FbxNode* lNode = pMesh->GetNode();
+		if (lNode)
+		{
+			lMaterial = lNode->GetSrcObject<FbxSurfacePhong>(0);
+			if (lMaterial == NULL)
+			{
+				FbxString lMaterialName = "toto";
+				FbxString lShadingName = "Phong";
+				FbxDouble3 lBlack(0.0, 0.0, 0.0);
+				FbxDouble3 lRed(0.1, 0.1, 0.1);
+				FbxDouble3 lDiffuseColor(0.75, 0.75, 1.0);
+
+				FbxLayer* lLayer = pMesh->GetLayer(0);
+
+				// Create a layer element material to handle proper mapping.
+				FbxLayerElementMaterial* lLayerElementMaterial = FbxLayerElementMaterial::Create(pMesh, lMaterialName.Buffer());
+
+				// This allows us to control where the materials are mapped.  Using eAllSame
+				// means that all faces/polygons of the mesh will be assigned the same material.
+				lLayerElementMaterial->SetMappingMode(FbxLayerElement::eAllSame);
+				lLayerElementMaterial->SetReferenceMode(FbxLayerElement::eIndexToDirect);
+
+				// Save the material on the layer
+				lLayer->SetMaterials(lLayerElementMaterial);
+
+				// Add an index to the lLayerElementMaterial.  Since we have only one, and are using eAllSame mapping mode,
+				// we only need to add one.
+				lLayerElementMaterial->GetIndexArray().Add(0);
+
+				lMaterial = FbxSurfacePhong::Create(pScene, lMaterialName.Buffer());
+
+				// Generate primary and secondary colors.
+				lMaterial->Emissive.Set(lBlack);
+				lMaterial->Ambient.Set(lRed);
+				lMaterial->AmbientFactor.Set(1.);
+				// Add texture for diffuse channel
+				lMaterial->Diffuse.Set(lDiffuseColor);
+				lMaterial->DiffuseFactor.Set(1.);
+				lMaterial->TransparencyFactor.Set(0.4);
+				lMaterial->ShadingModel.Set(lShadingName);
+				lMaterial->Shininess.Set(0.5);
+				lMaterial->Specular.Set(lBlack);
+				lMaterial->SpecularFactor.Set(0.3);
+				lNode->AddMaterial(lMaterial);
+			}
+		}
+
+		FbxFileTexture* lTexture = FbxFileTexture::Create(pScene, "Diffuse Texture");
+
+		// Set texture properties.
+		lTexture->SetFileName("c:\\temp\\texture\\TEXBSI380-5.png");
+		lTexture->SetTextureUse(FbxTexture::eStandard);
+		lTexture->SetMappingType(FbxTexture::eUV);
+		lTexture->SetMaterialUse(FbxFileTexture::eModelMaterial);
+		lTexture->SetSwapUV(false);
+		lTexture->SetTranslation(0.0, 0.0);
+		lTexture->SetScale(1.0, 1.0);
+		lTexture->SetRotation(0.0, 0.0);
+		lTexture->UVSet.Set(FbxString("DiffuseUV")); // Connect texture to the proper UV
+
+		// don't forget to connect the texture to the corresponding property of the material
+		if (lMaterial) lMaterial->Diffuse.ConnectSrcObject(lTexture);
+	}
+
+
+	// Create a global texture for cube.
+	void CreateTexture1(FbxMesh* pMesh)
+	{
+		FbxFileTexture* lTexture = FbxFileTexture::Create(g_pSdkManager, "Diffuse Texture");
+		
+		//FbxString lTexPath = gAppPath + "\\Crate.jpg";
+		
+		lTexture->SetFileName("c:\\temp\\texture\\TEXBSI380-5.png");
+		lTexture->SetTextureUse(FbxTexture::eStandard);
+		lTexture->SetMappingType(FbxTexture::eUV);
+		lTexture->SetMaterialUse(FbxFileTexture::eModelMaterial);
+		lTexture->SetSwapUV(false);
+		lTexture->SetTranslation(0.0, 0.0);
+		lTexture->SetScale(1.0, 1.0);
+		lTexture->SetRotation(0, 0);
+
+		pMesh->GetLayer(0)->GetTextures(FbxLayerElement::eTextureDiffuse)->GetDirectArray().Add(lTexture);
+	}
+	
+
 		/* Copied from FBX SDK samples */
 	bool SaveScene(FbxManager* pManager, FbxDocument* pScene, const char* pFilename, int pFileFormat = -1, bool pEmbedMedia = false)
 	{
@@ -110,6 +202,7 @@ namespace uesp
 		FbxMesh* lMesh = FbxMesh::Create(pScene, Name.c_str());
 		std::vector< FbxVector4 > ControlPoints;
 		std::vector< FbxVector4 > Normals;
+		std::vector< FbxVector2 > UVs;
 
 		for (auto& it : File.m_VertexCoordinates)
 		{
@@ -126,6 +219,8 @@ namespace uesp
 			for (auto& v : face.VertexData)
 			{
 				lControlPoints[j] = ControlPoints[v.VertexIndex];
+				UVs.push_back(FbxVector2( v.U / File.UV_TRANSFORM_FACTOR, v.V / File.UV_TRANSFORM_FACTOR));
+
 				++j;
 			}
 		}
@@ -140,12 +235,19 @@ namespace uesp
 			lNormalElement->GetDirectArray().Add(Normals[Normals.size() - 1]);
 		}
 
-		//FbxGeometryElementMaterial* lMaterialElement = lMesh->CreateElementMaterial();
-		//lMaterialElement->SetMappingMode(FbxGeometryElement::eByPolygon);
-		//lMaterialElement->SetReferenceMode(FbxGeometryElement::eIndexToDirect);
+		FbxGeometryElementUV* lUVDiffuseElement = lMesh->CreateElementUV("DiffuseUV");
+		FBX_ASSERT(lUVDiffuseElement != NULL);
+		lUVDiffuseElement->SetMappingMode(FbxGeometryElement::eByPolygonVertex);
+		lUVDiffuseElement->SetReferenceMode(FbxGeometryElement::eIndexToDirect);
+
+		for (auto &v : UVs)
+		{
+			lUVDiffuseElement->GetDirectArray().Add(v);
+		}
 
 		j = 0;
 		int i = 0;
+		lUVDiffuseElement->GetIndexArray().SetCount(File.m_TotalFaceVertexes);
 
 		for (auto& face : File.m_FaceData)
 		{
@@ -154,6 +256,7 @@ namespace uesp
 			for (auto& v : face.VertexData)
 			{
 				lMesh->AddPolygon(j);
+				lUVDiffuseElement->GetIndexArray().SetAt(j, j);
 				++j;
 			}
 
@@ -163,7 +266,10 @@ namespace uesp
 
 		FbxNode* lNode = FbxNode::Create(pScene, Name.c_str());
 		lNode->SetNodeAttribute(lMesh);
-		//CreateMaterials(pScene, lMesh);
+		lNode->SetShadingMode(FbxNode::eTextureShading);
+
+		CreateTexture(pScene, lMesh);
+		//CreateTexture1(lMesh);
 
 		return lNode;
 	}

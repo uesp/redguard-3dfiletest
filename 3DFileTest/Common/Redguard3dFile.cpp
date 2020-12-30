@@ -12,10 +12,12 @@ std::unordered_map<int, int> g_FaceVectorSizes;
 
 const float CRedguard3dFile::COOR_TRANSFORM_FACTOR = 256.0f;
 const float CRedguard3dFile::NORMAL_TRANSFORM_FACTOR = 256.0f;
+const float CRedguard3dFile::UV_TRANSFORM_FACTOR = 4096.0f;
 
 
 CRedguard3dFile::CRedguard3dFile() : 
-	m_TotalFaceVertexes(0), m_FileSize(0)
+	m_TotalFaceVertexes(0), m_FileSize(0), m_Version(0), m_OffsetUVZeroes(0), m_OffsetUnknown27(0), m_Is3DCFile(false), m_EndFaceDataOffset(0), m_FrameDataHeader({ 0 }), m_UseAltVertexOffset(false),
+	m_MinCoor({ 0 }), m_MaxCoor({ 0 }), m_TryReloadOld3dcFileVertex(true)
 {
 
 }
@@ -27,10 +29,57 @@ CRedguard3dFile::~CRedguard3dFile()
 }
 
 
+bool CRedguard3dFile::ConvertVersion()
+{
+
+	if (strncmp((const char *)&m_Header.Version, "v2.6", 4) == 0)
+	{
+		m_Version = 26;
+		return true;
+	}
+	else if (strncmp((const char *)&m_Header.Version, "v2.7", 4) == 0)
+	{
+		m_Version = 27;
+		return true;
+	}
+	else if (strncmp((const char *)&m_Header.Version, "v4.0", 4) == 0)
+	{
+		m_Version = 40;
+		return true;
+	}
+	else if (strncmp((const char *)&m_Header.Version, "v5.0", 4) == 0)
+	{
+		m_Version = 50;
+		return true;
+	}
+
+	m_Version = 0;
+	return ReportError("Error: Unknown version '%4.4s' found!", m_Header.Version);
+}
+
+
+dword CRedguard3dFile::FindNextOffsetAfter(const dword Offset)
+{
+	dword MinOffset = m_FileSize;
+
+	if (Offset >= (dword) m_FileSize) return  (dword)m_FileSize;
+
+	if (m_Header.OffsetFaceData > Offset && m_Header.OffsetFaceData < MinOffset) MinOffset = m_Header.OffsetFaceData;
+	if (m_Header.OffsetFaceNormals > Offset && m_Header.OffsetFaceNormals < MinOffset) MinOffset = m_Header.OffsetFaceNormals;
+	if (m_Header.OffsetFrameData > Offset && m_Header.OffsetFrameData < MinOffset) MinOffset = m_Header.OffsetFrameData;
+	if (m_Header.OffsetSection4 > Offset && m_Header.OffsetSection4 < MinOffset) MinOffset = m_Header.OffsetSection4;
+	if (m_Header.OffsetUVData > Offset && m_Header.OffsetUVData < MinOffset) MinOffset = m_Header.OffsetUVData;
+	if (m_Header.OffsetUVOffsets > Offset && m_Header.OffsetUVOffsets < MinOffset) MinOffset = m_Header.OffsetUVOffsets;
+	if (m_Header.OffsetVertexCoors > Offset && m_Header.OffsetVertexCoors < MinOffset) MinOffset = m_Header.OffsetVertexCoors;
+
+	return MinOffset;
+}
+
+
 bool CRedguard3dFile::LoadFaceData(FILE* pFile)
 {
 	size_t BytesRead;
-	size_t DataSize = m_Header.OffsetVertexCoors - m_Header.OffsetFaceData;
+	size_t DataSize = FindNextOffsetAfter(m_Header.OffsetFaceData) - m_Header.OffsetFaceData;
 
 	m_FaceData.clear();
 	m_FaceData.resize(m_Header.NumFaces);
@@ -45,14 +94,33 @@ bool CRedguard3dFile::LoadFaceData(FILE* pFile)
 		BytesRead = fread(&FaceData.VertexCount, 1, 1, pFile);
 		if (BytesRead != 1) return ReportError("Error: Failed to read 1 byte of VertexCount data from face data section in 3D file (face %u, ending at offset 0x%08lX)!", i, ftell(pFile));
 
-		BytesRead = fread(&FaceData.Flags, 1, 1, pFile);
-		if (BytesRead != 1) return ReportError("Error: Failed to read 1 byte of Flags data from face data section in 3D file (face %u, ending at offset 0x%08lX)!", i, ftell(pFile));
+		if (m_Version > 27)
+		{
+			BytesRead = fread(&FaceData.U1, 1, 2, pFile);
+			if (BytesRead != 2) return ReportError("Error: Failed to read 2 bytes of U1 data from face data section in 3D file (face %u, ending at offset 0x%08lX)!", i, ftell(pFile));
+		}
+		else
+		{
+			FaceData.U1 = 0;
+			BytesRead = fread(&FaceData.U1, 1, 1, pFile);
+			if (BytesRead != 1) return ReportError("Error: Failed to read 1 bytes of U1 data from face data section in 3D file (face %u, ending at offset 0x%08lX)!", i, ftell(pFile));
+		}
 
-		BytesRead = fread(&FaceData.Data1, 1, 4, pFile);
-		if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of Unknown1 data from face data section in 3D file (face %u, ending at offset 0x%08lX)!", i, ftell(pFile));
+		BytesRead = fread(&FaceData.U2, 1, 2, pFile);
+		if (BytesRead != 2) return ReportError("Error: Failed to read 2 bytes of U2 data from face data section in 3D file (face %u, ending at offset 0x%08lX)!", i, ftell(pFile));
 
-		BytesRead = fread(&FaceData.Data2, 1, 4, pFile);
-		if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of Unknown2 data from face data section in 3D file (face %u, ending at offset 0x%08lX)!", i, ftell(pFile));
+		if (m_Version > 27)
+		{
+			BytesRead = fread(&FaceData.U3, 1, 1, pFile);
+			if (BytesRead != 1) return ReportError("Error: Failed to read 1 byte of U3 data from face data section in 3D file (face %u, ending at offset 0x%08lX)!", i, ftell(pFile));
+		}
+		else
+		{
+			FaceData.U3 = 0;
+		}
+
+		BytesRead = fread(&FaceData.U4, 1, 4, pFile);
+		if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of U4 data from face data section in 3D file (face %u, ending at offset 0x%08lX)!", i, ftell(pFile));
 
 		FaceData.VertexData.resize(FaceData.VertexCount);
 
@@ -66,16 +134,28 @@ bool CRedguard3dFile::LoadFaceData(FILE* pFile)
 			BytesRead = fread(&VertexData.VertexIndex, 1, 4, pFile);
 			if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of VertexIndex data from face data section in 3D file (face %u, vertex %u, ending at offset 0x%08lX)!", i, j, ftell(pFile));
 
-			BytesRead = fread(&VertexData.Flags, 1, 4, pFile);
-			if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of VertexFlags data from face data section in 3D file (face %u, vertex %u, ending at offset 0x%08lX)!", i, j, ftell(pFile));
+					//Convert vertex offsets to indexes in older files
+			if (m_Version <= 27)
+			{
+				VertexData.VertexIndex = VertexData.VertexIndex / 12;
+			}
+
+			BytesRead = fread(&VertexData.U, 1, 2, pFile);
+			if (BytesRead != 2) return ReportError("Error: Failed to read 2 bytes of Vertex U data from face data section in 3D file (face %u, vertex %u, ending at offset 0x%08lX)!", i, j, ftell(pFile));
+
+			BytesRead = fread(&VertexData.V, 1, 2, pFile);
+			if (BytesRead != 2) return ReportError("Error: Failed to read 2 bytes of Vertex V data from face data section in 3D file (face %u, vertex %u, ending at offset 0x%08lX)!", i, j, ftell(pFile));
 		}
 	}
 
 	size_t EndOffset = ftell(pFile);
 	size_t ReadSize = EndOffset - m_Header.OffsetFaceData;
 
+	m_EndFaceDataOffset = EndOffset;
+
 	if (ReadSize != DataSize) 
 	{
+		if (m_Is3DCFile && m_Version <= 27) return true;
 		ReportError("Warning: Only read %u bytes of %u bytes from 3D file face data section!", ReadSize, DataSize);
 	}
 
@@ -85,34 +165,66 @@ bool CRedguard3dFile::LoadFaceData(FILE* pFile)
 
 bool CRedguard3dFile::LoadVertexCoordinates(FILE* pFile)
 {
-	size_t DataSize = m_Header.OffsetFaceNormals - m_Header.OffsetVertexCoors;
+	size_t DataSize = FindNextOffsetAfter(m_Header.OffsetVertexCoors) - m_Header.OffsetVertexCoors;
 	size_t BytesRead;
 
 	m_VertexCoordinates.clear();
 	m_VertexCoordinates.resize(m_Header.NumVertices);
 	if (m_Header.NumVertices <= 0) return true;
 
-	if (fseek(pFile, m_Header.OffsetVertexCoors, SEEK_SET) != 0) return ReportError("Error: Failed to seek to Vertex coordinates in 3D file at 0x%08lX!", m_Header.OffsetVertexCoors);
+	if (m_Is3DCFile && m_Version <= 27)
+	{
+		if (m_Header.OffsetFrameData == 0) return ReportError("Error: No frame data header found in old 3DC file data!");
+		if (m_EndFaceDataOffset == 0) return ReportError("Error: No vertex data offset found for old 3DC file data!");
+
+		dword Offset = m_EndFaceDataOffset + m_FrameDataHeader.u3;
+		if (m_UseAltVertexOffset) Offset = m_EndFaceDataOffset;
+
+		if (Offset >= (dword) m_FileSize) return ReportError("Error: Failed to seek to Vertex coordinates in 3D file at 0x%08lX (past end of file)!", Offset);
+
+		if (fseek(pFile, Offset, SEEK_SET) != 0) return ReportError("Error: Failed to seek to Vertex coordinates in 3D file at 0x%08lX!", Offset);
+	}
+	else
+	{
+		if (fseek(pFile, m_Header.OffsetVertexCoors, SEEK_SET) != 0) return ReportError("Error: Failed to seek to Vertex coordinates in 3D file at 0x%08lX!", m_Header.OffsetVertexCoors);
+	}
 
 	for (dword i = 0; i < m_Header.NumVertices; ++i)
 	{
 		rd_3dfile_coor_t& Coor = m_VertexCoordinates[i];
 
 		BytesRead = fread(&Coor.x, 1, 4, pFile);
-		if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of X vertex data in 3D file (vertex %u, ending at offset 0x%08lX)!", i, ftell(pFile));;
+		if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of X vertex data in 3D file (vertex %u, ending at offset 0x%08lX)!", i, ftell(pFile));
 
 		BytesRead = fread(&Coor.y, 1, 4, pFile);
-		if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of Y vertex data in 3D file (vertex %u, ending at offset 0x%08lX)!", i, ftell(pFile));;
+		if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of Y vertex data in 3D file (vertex %u, ending at offset 0x%08lX)!", i, ftell(pFile));
 
 		BytesRead = fread(&Coor.z, 1, 4, pFile);
-		if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of Z vertex data in 3D file (vertex %u, ending at offset 0x%08lX)!", i, ftell(pFile));;
+		if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of Z vertex data in 3D file (vertex %u, ending at offset 0x%08lX)!", i, ftell(pFile));
+
+
+		if (i == 0)
+		{
+			m_MinCoor = Coor;
+			m_MaxCoor = Coor;
+		}
+		else
+		{
+			if (m_MinCoor.x > Coor.x) m_MinCoor.x = Coor.x;
+			if (m_MinCoor.y > Coor.y) m_MinCoor.y = Coor.y;
+			if (m_MinCoor.z > Coor.z) m_MinCoor.z = Coor.z;
+			if (m_MaxCoor.x < Coor.x) m_MaxCoor.x = Coor.x;
+			if (m_MaxCoor.y < Coor.y) m_MaxCoor.y = Coor.y;
+			if (m_MaxCoor.z < Coor.z) m_MaxCoor.z = Coor.z;
+		}
 	}
 
 	size_t EndOffset = ftell(pFile);
 	size_t ReadSize = EndOffset - m_Header.OffsetVertexCoors;
-
+	
 	if (ReadSize != DataSize)
 	{
+		if (m_Is3DCFile && m_Version <= 27) return true;
 		ReportError("Warning: Only read %u bytes of %u bytes from 3D file vertex coordinates section!", ReadSize, DataSize);
 	}
 
@@ -122,7 +234,7 @@ bool CRedguard3dFile::LoadVertexCoordinates(FILE* pFile)
 
 bool CRedguard3dFile::LoadFaceNormals(FILE* pFile)
 {
-	size_t DataSize = m_Header.OffsetSection3 - m_Header.OffsetFaceNormals;
+	size_t DataSize = FindNextOffsetAfter(m_Header.OffsetFaceNormals) - m_Header.OffsetFaceNormals;
 	size_t BytesRead;
 
 	m_FaceNormals.clear();
@@ -150,71 +262,8 @@ bool CRedguard3dFile::LoadFaceNormals(FILE* pFile)
 
 	if (ReadSize != DataSize)
 	{
+		if (m_Is3DCFile && m_Version <= 27) return true;
 		ReportError("Warning: Only read %u bytes of %u bytes from 3D file face normal section!", ReadSize, DataSize);
-	}
-
-	return true;
-}
-
-
-bool CRedguard3dFile::LoadSection3(FILE* pFile)
-{
-	size_t DataSize = m_Header.OffsetSection4 - m_Header.OffsetSection3;
-	size_t BytesRead;
-
-	if (m_Header.OffsetSection4 == 0) 
-	{
-		if (m_Header.OffsetUVOffsets == 0)
-			DataSize = m_Header.OffsetUVData - m_Header.OffsetSection3;
-		else
-			DataSize = m_Header.OffsetUVOffsets - m_Header.OffsetSection3;
-	}	
-
-	if (fseek(pFile, m_Header.OffsetSection3, SEEK_SET) != 0) return ReportError("Error: Failed to seek to Section3 in 3D file at 0x%08lX!", m_Header.OffsetSection3);
-
-	BytesRead = fread(&m_Section3.u1, 1, 4, pFile);
-	if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of Unknown1 section3 data in 3D file (ending at offset 0x%08lX)!", ftell(pFile));
-
-	BytesRead = fread(&m_Section3.u2, 1, 4, pFile);
-	if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of Unknown2 section3 data in 3D file (ending at offset 0x%08lX)!", ftell(pFile));
-
-	BytesRead = fread(&m_Section3.u3, 1, 4, pFile);
-	if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of Unknown3 section3 data in 3D file (ending at offset 0x%08lX)!", ftell(pFile));
-
-	BytesRead = fread(&m_Section3.u4, 1, 4, pFile);
-	if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of Unknown4 section3 data in 3D file (ending at offset 0x%08lX)!", ftell(pFile));
-
-	size_t EndOffset = ftell(pFile);
-	size_t ReadSize = EndOffset - m_Header.OffsetSection3;
-
-	if (ReadSize != DataSize)
-	{
-		ReportError("Warning: Only read %u bytes of %u bytes from 3D file section 3 data!", ReadSize, DataSize);
-	}
-
-	return true;
-}
-
-
-bool CRedguard3dFile::LoadSection4(FILE* pFile)
-{
-	size_t DataSize = m_Header.OffsetUVOffsets - m_Header.OffsetSection4;
-	//size_t BytesRead;
-	
-	if (m_Header.OffsetSection4 == 0) return true;
-
-	if (fseek(pFile, m_Header.OffsetSection4, SEEK_SET) != 0) return ReportError("Error: Failed to seek to Section4 in 3D file at 0x%08lX!", m_Header.OffsetSection4);
-
-	return true;
-
-		//TODO
-
-	size_t EndOffset = ftell(pFile);
-	size_t ReadSize = EndOffset - m_Header.OffsetSection4;
-
-	if (ReadSize != DataSize)
-	{
-		ReportError("Warning: Only read %u bytes of %u bytes from 3D file section 3 data!", ReadSize, DataSize);
 	}
 
 	return true;
@@ -223,11 +272,10 @@ bool CRedguard3dFile::LoadSection4(FILE* pFile)
 
 bool CRedguard3dFile::LoadUVOffsets(FILE* pFile)
 {
-	size_t DataSize = m_Header.OffsetUVData - m_Header.OffsetUVOffsets;
-	size_t BytesRead;
-
 	if (m_Header.OffsetUVOffsets == 0) return true;
 
+	size_t DataSize = FindNextOffsetAfter(m_Header.OffsetUVOffsets) - m_Header.OffsetUVOffsets;
+	size_t BytesRead;
 	size_t NumUVOffsets = m_Header.NumUVOffsets;
 
 	m_UVOffsets.clear();
@@ -258,9 +306,26 @@ bool CRedguard3dFile::LoadUVOffsets(FILE* pFile)
 }
 
 
+bool CRedguard3dFile::LoadFrameData(FILE* pFile)
+{
+	if (m_Header.OffsetFrameData == 0) return true;
+	if (m_Header.OffsetFrameData >= (dword) m_FileSize) return true;
+
+	if (fseek(pFile, m_Header.OffsetFrameData, SEEK_SET) != 0) return ReportError("Error: Failed to seek to FrameData in 3D file at 0x%08lX!", m_Header.OffsetFrameData);
+
+	size_t BytesRead = fread(&m_FrameDataHeader, 1, 16, pFile);
+	if (BytesRead != 16) return ReportError("Error: Only read %u of %u bytes of frame data header from 3D file (ending at offset 0x%08lX)!", BytesRead, 16, ftell(pFile));
+
+	return true;
+}
+
+
 bool CRedguard3dFile::LoadUVCoordinates(FILE* pFile)
 {
-	size_t DataSize = m_FileSize - m_Header.OffsetUVData;
+	if (m_Header.OffsetUVData == 0) return true;
+	if (m_Header.OffsetUVData >= (dword)m_FileSize) return true;
+
+	size_t DataSize = FindNextOffsetAfter(m_Header.OffsetUVData) - m_Header.OffsetUVData;
 	size_t BytesRead;
 	size_t NumUVCoordinates = DataSize / 12;
 
@@ -294,11 +359,39 @@ bool CRedguard3dFile::LoadUVCoordinates(FILE* pFile)
 
 	if (EndOffset < (size_t)m_FileSize)
 	{
-		ReportError("Warning: Extra %u bytes left over at end of file!", m_FileSize - EndOffset);
+		//ReportError("Warning: Extra %u bytes left over at end of file!", m_FileSize - EndOffset);
 	}
 	else if (EndOffset > (size_t)m_FileSize)
 	{
 		ReportError("Warning: Read %u bytes past end of file!", EndOffset - m_FileSize);
+	}
+
+	return true;
+}
+
+
+bool CRedguard3dFile::ConvertHeader27()
+{
+	m_OffsetUVZeroes = m_Header.NumUVOffsets;
+	m_Header.NumUVOffsets = 0;
+
+	m_OffsetUnknown27 = m_Header.OffsetUVData;
+	m_Header.OffsetUVData = m_OffsetUVZeroes;
+
+	return true;
+}
+
+
+bool CRedguard3dFile::LoadHeader(FILE* pFile)
+{
+	size_t BytesRead = fread(&m_Header, 1, REDGUARD_HEADER_SIZE, pFile);
+	if (BytesRead != REDGUARD_HEADER_SIZE) return ReportError("Error: Only read %u of %u bytes of Header data from 3D file (ending at offset 0x%08lX)!", BytesRead, REDGUARD_HEADER_SIZE, ftell(pFile));
+
+	ConvertVersion();
+
+	if (m_Version <= 27)
+	{
+		ConvertHeader27();
 	}
 
 	return true;
@@ -318,14 +411,25 @@ bool CRedguard3dFile::Load(const string Filename)
 	std::size_t dirPos = Filename.find_last_of("\\");
 	if (dirPos != std::string::npos) m_Name = Filename.substr(dirPos + 1, Filename.length() - dirPos - 1);
 
+	m_Is3DCFile = StringEndsWithI(Filename, ".3dc");
+
 	fseek(pFile, 0, SEEK_END);
 	m_FileSize = ftell(pFile);
 	fseek(pFile, 0, SEEK_SET);
 
-	size_t BytesRead = fread(&m_Header, 1, REDGUARD_HEADER_SIZE, pFile);
-	if (BytesRead != REDGUARD_HEADER_SIZE) return ReportError("Error: Only read %u of %u bytes of Header data from 3D file (ending at offset 0x%08lX)!", BytesRead, REDGUARD_HEADER_SIZE, ftell(pFile));
+	if (!LoadHeader(pFile))
+	{
+		fclose(pFile);
+		return false;
+	}
 
-	if (!LoadFaceData(pFile)) 
+	if (!LoadFrameData(pFile))
+	{
+		fclose(pFile);
+		return false;
+	}
+
+	if (!LoadFaceData(pFile))
 	{
 		fclose(pFile);
 		return false;
@@ -337,19 +441,33 @@ bool CRedguard3dFile::Load(const string Filename)
 		return false;
 	}
 
+		/* See if we need to reload an old 3DC vertex data based on if the coordinate data looks "bad" or not.
+		 * This doesn't seem to work. */	 
+	if (m_Is3DCFile && m_Version <= 27 && !m_UseAltVertexOffset && m_TryReloadOld3dcFileVertex)
+	{
+		bool reloadFile = false;
+		printf("\tReloading vertex data...\n");
+
+		if (m_MinCoor.x < -MAX_COORVALUE_FOROLD3DCRELOAD) reloadFile = true;
+		if (m_MinCoor.y < -MAX_COORVALUE_FOROLD3DCRELOAD) reloadFile = true;
+		if (m_MinCoor.z < -MAX_COORVALUE_FOROLD3DCRELOAD) reloadFile = true;
+		if (m_MaxCoor.x > MAX_COORVALUE_FOROLD3DCRELOAD) reloadFile = true;
+		if (m_MaxCoor.y > MAX_COORVALUE_FOROLD3DCRELOAD) reloadFile = true;
+		if (m_MaxCoor.z > MAX_COORVALUE_FOROLD3DCRELOAD) reloadFile = true;
+		
+		if (reloadFile)
+		{
+			m_UseAltVertexOffset = true;
+
+			if (!LoadVertexCoordinates(pFile))
+			{
+				fclose(pFile);
+				return false;
+			}
+		}
+	}
+
 	if (!LoadFaceNormals(pFile))
-	{
-		fclose(pFile);
-		return false;
-	}
-
-	if (!LoadSection3(pFile))
-	{
-		fclose(pFile);
-		return false;
-	}
-
-	if (!LoadSection4(pFile))
 	{
 		fclose(pFile);
 		return false;

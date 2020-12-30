@@ -31,6 +31,14 @@ namespace uesp
 
 	void InitializeImageLib();
 	
+	bool OpenLog(const char* pFilename);
+	void SendLogToStream(FILE* pStream);
+	void DuplicateLogToStdOut(const bool flag);
+	void CloseLog();
+	void PrintLog(const char* pString, ...);
+	void PrintLogV(const char* pString, va_list Args);
+	void SetLogLineHeaderOutput(const bool flag);
+	
 	bool ReportError(const char* pMsg, ...);
 
 	dword SwapDword(dword val);
@@ -38,6 +46,9 @@ namespace uesp
 	bool SaveImagePng(const int Width, const int Height, std::vector<byte>& Data, const std::string Filename);
 
 	bool ConvertPaletteImageData(const int Width, const int Height, std::vector<byte>& InputData, std::vector<byte>& OutputData, redguard_palette_t& Palette);
+
+	bool StringEndsWith(std::string const &fullString, std::string const &ending);
+	bool StringEndsWithI(std::string const &fullString, std::string const &ending);
 
 };
 
