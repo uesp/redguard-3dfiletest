@@ -149,9 +149,10 @@ void uesp::InitializeImageLib()
 }
 
 
-bool uesp::SaveImagePng(const int Width, const int Height, std::vector<byte>& Data, const std::string Filename)
+bool uesp::SaveImagePng(const int Width, const int Height, std::vector<byte>& Data, const std::string Filename, const bool flip)
 {
 	ilTexImage(Width, Height, 1, 4, IL_RGBA, IL_UNSIGNED_BYTE, Data.data());
+	if (flip) iluFlipImage();
 	return ilSave(IL_PNG, Filename.c_str());
 }
 

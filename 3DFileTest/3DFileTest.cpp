@@ -814,13 +814,26 @@ const size_t REDGUARD_WORLD_EXPORTWIDTH = 128;
 const size_t REDGUARD_WORLD_EXPORTHEIGHT = 128;
 
 
+typedef std::vector<byte> simpleimagedata_t;
+typedef std::vector< simpleimagedata_t > imagedatas_t;
+
+
 bool TestExportWorldFile(std::string filename)
 {
 	FILE* pFile;
 	size_t BytesRead;
 	std::vector<byte> Header(REDGUARD_WORLD_HEADERSIZE, 0);
 	std::vector<byte> Footer(REDGUARD_WORLD_FOOTERSIZE, 0);
-	std::vector<byte> FileData;
+	simpleimagedata_t FileData;
+
+	std::vector < std::vector< imagedatas_t > > ImageDatas;
+
+	ImageDatas.resize(4);
+
+	for (auto&& i : ImageDatas)
+	{
+		i.resize(4);
+	}
 
 	pFile = fopen(filename.c_str(), "rb");
 
@@ -875,6 +888,12 @@ bool TestExportWorldFile(std::string filename)
 
 		for (int imageIndex = 0; imageIndex < 4; ++imageIndex)
 		{
+			simpleimagedata_t HeightMapImage;
+			simpleimagedata_t HeightMapFlag;
+
+			HeightMapImage.resize(dataSize, 0);
+			HeightMapFlag.resize(dataSize, 0);
+
 			BytesRead = fread(FileData.data(), 1, dataSize, pFile);
 
 			if (BytesRead != dataSize)
@@ -884,15 +903,83 @@ bool TestExportWorldFile(std::string filename)
 				return false;
 			}
 
+			if (imageIndex == 0)
+			{
+				for (int j = 0; j < dataSize; ++j)
+				{
+					HeightMapImage[j] = (FileData[j] & 0x7F) * 2;
+					HeightMapFlag[j] = FileData[j] & 0x80;
+				}
+			}
+			else if (imageIndex == 2)
+			{
+				for (int j = 0; j < dataSize; ++j)
+				{
+					HeightMapImage[j] = FileData[j] & 0x3F;
+					HeightMapFlag[j] = FileData[j] & 0xC0;
+				}
+			}
+			else
+			{
+				HeightMapImage = FileData;
+			}
+
 			//std::string OutputFile = OUTPUT_TEXTURE_PATH + ExtractFilename(filename) + ".png";
-			char OutputFile[1000];
-			snprintf(OutputFile, 900, "%s%s-%d-%d.png", OUTPUT_TEXTURE_PATH.c_str(), ExtractFilename(filename).c_str(), sectionIndex, imageIndex);
+			//char OutputFile[1000];
+			//snprintf(OutputFile, 900, "%s%s-%d-%d.png", OUTPUT_TEXTURE_PATH.c_str(), ExtractFilename(filename).c_str(), sectionIndex, imageIndex);
 
-			ilTexImage(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, FileData.data());
-			ilSave(IL_PNG, OutputFile);
+			//ilTexImage(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, FileData.data());
+			//iluFlipImage();
+			//ilSave(IL_PNG, OutputFile);
 
+			ImageDatas[sectionIndex][imageIndex].push_back(HeightMapImage);
+			ImageDatas[sectionIndex][imageIndex].push_back(HeightMapFlag);
 		}
 	}
+
+	char OutputFile[1000];
+	ILuint imageID = ilGenImage();
+	ilBindImage(imageID);
+
+	ilTexImage(REDGUARD_WORLD_EXPORTWIDTH*2, REDGUARD_WORLD_EXPORTHEIGHT*2, 1, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, nullptr);
+	
+	ilSetPixels(0, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[0][0][0].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[1][0][0].data());
+	ilSetPixels(0, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[2][0][0].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[3][0][0].data());
+	iluFlipImage();
+	ilConvertImage(IL_RGB, IL_INT);
+	snprintf(OutputFile, 900, "%s%s-HeightMap.png", OUTPUT_TEXTURE_PATH.c_str(), ExtractFilename(filename).c_str());
+	ilSave(IL_PNG, OutputFile);
+
+	ilSetPixels(0, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[0][0][1].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[1][0][1].data());
+	ilSetPixels(0, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[2][0][1].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[3][0][1].data());
+	iluFlipImage();
+	ilConvertImage(IL_RGB, IL_INT);
+	snprintf(OutputFile, 900, "%s%s-HeightFlag.png", OUTPUT_TEXTURE_PATH.c_str(), ExtractFilename(filename).c_str());
+	ilSave(IL_PNG, OutputFile);
+
+	ilSetPixels(0, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[0][2][0].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[1][2][0].data());
+	ilSetPixels(0, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[2][2][0].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[3][2][0].data());
+	iluFlipImage();
+	ilConvertImage(IL_RGB, IL_INT);
+	snprintf(OutputFile, 900, "%s%s-Texture.png", OUTPUT_TEXTURE_PATH.c_str(), ExtractFilename(filename).c_str());
+	ilSave(IL_PNG, OutputFile);
+
+	ilSetPixels(0, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[0][2][1].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, 0, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[1][2][1].data());
+	ilSetPixels(0, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[2][2][1].data());
+	ilSetPixels(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 0, REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, ImageDatas[3][2][1].data());
+	iluFlipImage();
+	ilConvertImage(IL_RGB, IL_INT);
+	snprintf(OutputFile, 900, "%s%s-TextureRotation.png", OUTPUT_TEXTURE_PATH.c_str(), ExtractFilename(filename).c_str());
+	ilSave(IL_PNG, OutputFile);
+
+	ilDeleteImage(imageID);
 
 	if (REDGUARD_WORLD_FOOTERSIZE > 0)
 	{
@@ -924,6 +1011,9 @@ int main()
 	OpenLog("3dfiletest.log");
 
 	InitializeImageLib();
+	ilEnable(IL_ORIGIN_SET);
+	ilOriginFunc(IL_ORIGIN_LOWER_LEFT);
+
 	TestExportWorldFile(REDGUARD_WORLD_FILE1);
 	TestExportWorldFile(REDGUARD_WORLD_FILE2);
 	TestExportWorldFile(REDGUARD_WORLD_FILE3);

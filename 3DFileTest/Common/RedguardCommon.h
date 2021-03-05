@@ -43,7 +43,7 @@ namespace uesp
 
 	dword SwapDword(dword val);
 
-	bool SaveImagePng(const int Width, const int Height, std::vector<byte>& Data, const std::string Filename);
+	bool SaveImagePng(const int Width, const int Height, std::vector<byte>& Data, const std::string Filename, const bool flip = true);
 
 	bool ConvertPaletteImageData(const int Width, const int Height, std::vector<byte>& InputData, std::vector<byte>& OutputData, redguard_palette_t& Palette);
 
