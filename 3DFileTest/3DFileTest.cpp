@@ -8,6 +8,9 @@
 
 #include <fbxsdk.h>
 
+#include "il/il.h"
+#include "il/ilu.h"
+
 
 using std::string;
 using std::vector;
@@ -21,6 +24,11 @@ const dword REDGUARD_HEADER_SIZE = 64;
 
 const string OUTPUT_FBX_PATH = "c:\\Temp\\fbx3\\";
 const string OUTPUT_TEXTURE_PATH = "c:\\Temp\\texture\\";
+
+const string REDGUARD_WORLD_FILE1 = "D:\\Redguard\\Redguard\\maps\\ISLAND.WLD";
+const string REDGUARD_WORLD_FILE2 = "D:\\Redguard\\Redguard\\maps\\HIDEOUT.WLD";
+const string REDGUARD_WORLD_FILE3 = "D:\\Redguard\\Redguard\\maps\\EXTPALAC.WLD";
+const string REDGUARD_WORLD_FILE4 = "D:\\Redguard\\Redguard\\maps\\NECRISLE.WLD";
 
 
 struct rg3d_header_t 
@@ -799,6 +807,114 @@ bool SaveScene1(FbxManager* pManager, FbxDocument* pScene, const char* pFilename
 }
 
 
+const size_t REDGUARD_WORLD_HEADERSIZE = 1184;
+const size_t REDGUARD_WORLD_IMAGEHEADERSIZE = 22;
+const size_t REDGUARD_WORLD_FOOTERSIZE = 16;
+const size_t REDGUARD_WORLD_EXPORTWIDTH = 128;
+const size_t REDGUARD_WORLD_EXPORTHEIGHT = 128;
+
+
+bool TestExportWorldFile(std::string filename)
+{
+	FILE* pFile;
+	size_t BytesRead;
+	std::vector<byte> Header(REDGUARD_WORLD_HEADERSIZE, 0);
+	std::vector<byte> Footer(REDGUARD_WORLD_FOOTERSIZE, 0);
+	std::vector<byte> FileData;
+
+	pFile = fopen(filename.c_str(), "rb");
+
+	if (pFile == nullptr)
+	{
+		PrintLog("Error: Failed to open file '%s'!\n", filename.c_str());
+		return false;
+	}
+
+	if (fseek(pFile, 0, SEEK_END) != 0)
+	{
+		fclose(pFile);
+		PrintLog("Error: Failed to find end of file '%s'!\n", filename.c_str());
+		return false;
+	}
+
+	fpos_t fileSize = ftell(pFile);
+
+	if (fileSize == -1)
+	{
+		fclose(pFile);
+		PrintLog("Error: Failed to get size of file '%s'!\n", filename.c_str());
+		return false;
+	}
+
+	fseek(pFile, 0, SEEK_SET);
+		
+	BytesRead = fread(Header.data(), 1, REDGUARD_WORLD_HEADERSIZE, pFile);
+
+	if (BytesRead != REDGUARD_WORLD_HEADERSIZE)
+	{
+		fclose(pFile);
+		PrintLog("Error: Only read %d of %d bytes from world file header '%s'!\n", BytesRead, REDGUARD_WORLD_HEADERSIZE, filename.c_str());
+		return false;
+	}
+
+	int dataSize = REDGUARD_WORLD_EXPORTWIDTH * REDGUARD_WORLD_EXPORTHEIGHT;
+	FileData.resize(dataSize, 0);
+
+	for (int sectionIndex = 0; sectionIndex < 4; ++sectionIndex)
+	{
+		byte imageHeader[REDGUARD_WORLD_IMAGEHEADERSIZE];
+
+		BytesRead = fread(imageHeader, 1, REDGUARD_WORLD_IMAGEHEADERSIZE, pFile);
+
+		if (BytesRead != REDGUARD_WORLD_IMAGEHEADERSIZE)
+		{
+			fclose(pFile);
+			PrintLog("Error: Only read %d of %d bytes from section header data '%s'!\n", BytesRead, REDGUARD_WORLD_IMAGEHEADERSIZE, filename.c_str());
+			return false;
+		}
+
+		for (int imageIndex = 0; imageIndex < 4; ++imageIndex)
+		{
+			BytesRead = fread(FileData.data(), 1, dataSize, pFile);
+
+			if (BytesRead != dataSize)
+			{
+				fclose(pFile);
+				PrintLog("Error: Only read %d of %d bytes from image section %d:%d world file data '%s'!\n", BytesRead, dataSize, sectionIndex, imageIndex, filename.c_str());
+				return false;
+			}
+
+			//std::string OutputFile = OUTPUT_TEXTURE_PATH + ExtractFilename(filename) + ".png";
+			char OutputFile[1000];
+			snprintf(OutputFile, 900, "%s%s-%d-%d.png", OUTPUT_TEXTURE_PATH.c_str(), ExtractFilename(filename).c_str(), sectionIndex, imageIndex);
+
+			ilTexImage(REDGUARD_WORLD_EXPORTWIDTH, REDGUARD_WORLD_EXPORTHEIGHT, 1, 1, IL_LUMINANCE, IL_UNSIGNED_BYTE, FileData.data());
+			ilSave(IL_PNG, OutputFile);
+
+		}
+	}
+
+	if (REDGUARD_WORLD_FOOTERSIZE > 0)
+	{
+		BytesRead = fread(Footer.data(), 1, REDGUARD_WORLD_FOOTERSIZE, pFile);
+
+		if (BytesRead != REDGUARD_WORLD_FOOTERSIZE)
+		{
+			fclose(pFile);
+			PrintLog("Error: Only read %d of %d bytes from world file data footer '%s'!\n", BytesRead, REDGUARD_WORLD_FOOTERSIZE, filename.c_str());
+			return false;
+		}
+	}
+
+	fpos_t endPos = ftell(pFile);
+	if (endPos != fileSize)	PrintLog("Warning: Didn't read entire world file data: %d / %d (%d bytes misread)!\n", (int)endPos, (int)fileSize, (int)endPos - (int)fileSize);
+
+	fclose(pFile);
+
+	
+	return true;
+}
+
 
 
 int main()
@@ -806,6 +922,14 @@ int main()
 	SetLogLineHeaderOutput(false);
 	DuplicateLogToStdOut(true);
 	OpenLog("3dfiletest.log");
+
+	InitializeImageLib();
+	TestExportWorldFile(REDGUARD_WORLD_FILE1);
+	TestExportWorldFile(REDGUARD_WORLD_FILE2);
+	TestExportWorldFile(REDGUARD_WORLD_FILE3);
+	TestExportWorldFile(REDGUARD_WORLD_FILE4);
+	
+	return 0;
 
 	InitializeImageLib();
 	InitializeFbxSdkObjects();

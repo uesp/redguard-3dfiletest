@@ -202,7 +202,6 @@ bool CRedguard3dFile::LoadVertexCoordinates(FILE* pFile)
 		BytesRead = fread(&Coor.z, 1, 4, pFile);
 		if (BytesRead != 4) return ReportError("Error: Failed to read 4 bytes of Z vertex data in 3D file (vertex %u, ending at offset 0x%08lX)!", i, ftell(pFile));
 
-
 		if (i == 0)
 		{
 			m_MinCoor = Coor;
