@@ -979,6 +979,68 @@ bool TestExportWorldFile(std::string filename)
 	snprintf(OutputFile, 900, "%s%s-TextureRotation.png", OUTPUT_TEXTURE_PATH.c_str(), ExtractFilename(filename).c_str());
 	ilSave(IL_PNG, OutputFile);
 
+	snprintf(OutputFile, 900, "%s%s-Texture.csv", OUTPUT_TEXTURE_PATH.c_str(), ExtractFilename(filename).c_str());
+	FILE* pCsvFile = fopen(OutputFile, "wt");
+	fprintf(pCsvFile, "x, y, index, rotation\n");
+
+	byte* pTextureImageData = ImageDatas[0][2][0].data();
+	byte* pTextureRotationData = ImageDatas[0][2][1].data();
+
+	for (int y = 0; y < REDGUARD_WORLD_EXPORTHEIGHT; ++y)
+	{
+		for (int x = 0; x < REDGUARD_WORLD_EXPORTWIDTH; ++x)
+		{
+			int i = y * REDGUARD_WORLD_EXPORTHEIGHT + x;
+			int index = pTextureImageData[i];
+			int rot = pTextureRotationData[i];
+			fprintf(pCsvFile, "%d, %d, %d, %d\n", x, y, index, rot);
+		}
+	}
+
+	pTextureImageData = ImageDatas[1][2][0].data();
+	pTextureRotationData = ImageDatas[1][2][1].data();
+
+	for (int y = 0; y < REDGUARD_WORLD_EXPORTHEIGHT; ++y)
+	{
+		for (int x = 0; x < REDGUARD_WORLD_EXPORTWIDTH; ++x)
+		{
+			int i = y * REDGUARD_WORLD_EXPORTHEIGHT + x;
+			int index = pTextureImageData[i];
+			int rot = pTextureRotationData[i];
+			fprintf(pCsvFile, "%d, %d, %d, %d\n", x + REDGUARD_WORLD_EXPORTWIDTH, y, index, rot);
+		}
+	}
+
+	pTextureImageData = ImageDatas[2][2][0].data();
+	pTextureRotationData = ImageDatas[2][2][1].data();
+
+	for (int y = 0; y < REDGUARD_WORLD_EXPORTHEIGHT; ++y)
+	{
+		for (int x = 0; x < REDGUARD_WORLD_EXPORTWIDTH; ++x)
+		{
+			int i = y * REDGUARD_WORLD_EXPORTHEIGHT + x;
+			int index = pTextureImageData[i];
+			int rot = pTextureRotationData[i];
+			fprintf(pCsvFile, "%d, %d, %d, %d\n", x, y + REDGUARD_WORLD_EXPORTHEIGHT, index, rot);
+		}
+	}
+
+	pTextureImageData = ImageDatas[3][2][0].data();
+	pTextureRotationData = ImageDatas[3][2][1].data();
+
+	for (int y = 0; y < REDGUARD_WORLD_EXPORTHEIGHT; ++y)
+	{
+		for (int x = 0; x < REDGUARD_WORLD_EXPORTWIDTH; ++x)
+		{
+			int i = y * REDGUARD_WORLD_EXPORTHEIGHT + x;
+			int index = pTextureImageData[i];
+			int rot = pTextureRotationData[i];
+			fprintf(pCsvFile, "%d, %d, %d, %d\n", x + REDGUARD_WORLD_EXPORTWIDTH, y + REDGUARD_WORLD_EXPORTHEIGHT, index, rot);
+		}
+	}
+
+	fclose(pCsvFile);
+
 	ilDeleteImage(imageID);
 
 	if (REDGUARD_WORLD_FOOTERSIZE > 0)
@@ -1048,4 +1110,5 @@ int main()
 
 	return 0; 
 }
+
 
